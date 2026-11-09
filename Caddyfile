@@ -1,0 +1,9 @@
+# HTTPS automático para los dos addons — reemplaza los dominios reales
+# Requiere DNS: p.TUDOMINIO.com y s.TUDOMINIO.com → IP del VPS
+p.tudominio.com {
+    reverse_proxy hybrid-prowlarr:7001
+}
+
+s.tudominio.com {
+    reverse_proxy hybrid-sites:7003
+}

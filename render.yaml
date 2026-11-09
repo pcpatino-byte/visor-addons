@@ -1,0 +1,36 @@
+# Blueprint de Render — despliegue en 1 clic ("New + → Blueprint")
+# Dos servicios gratuitos con HTTPS automático (*.onrender.com)
+services:
+  - type: web
+    name: hybrid-prowlarr
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index-prowlarr.js
+    healthCheckPath: /manifest.json
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: SOFT_TIMEOUT_MS
+        value: "12000"
+      - key: DB_PATH
+        value: /tmp/cache-prowlarr.db
+      # sin PROWLARR_API_KEY → modo nube: APIs públicas TPB/YTS
+
+  - type: web
+    name: hybrid-sites
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index-sites.js
+    healthCheckPath: /manifest.json
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: DB_PATH
+        value: /tmp/cache-sites.db
+      # dominio propio del servicio para los enlaces deferidos /resolve
+      - key: RESOLVE_BASE_URL
+        value: https://hybrid-sites.onrender.com
+      - key: GLOBAL_TIMEOUT_MS
+        value: "6000"

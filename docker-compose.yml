@@ -1,0 +1,61 @@
+# Stack en la nube: addons + Prowlarr + FlareSolverr + HTTPS automático
+# DNS requerido: p.TUDOMINIO.com y s.TUDOMINIO.com → IP del VPS
+version: "3.8"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    environment:
+      - DOMINIO=${DOMINIO}
+    restart: unless-stopped
+
+  hybrid-prowlarr:
+    build: .
+    image: hybrid-addons
+    command: ["node", "index-prowlarr.js"]
+    environment:
+      - PROWLARR_URL=http://prowlarr:9696
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY}
+      - SOFT_TIMEOUT_MS=12000
+      - DB_PATH=/data/cache-prowlarr.db
+    volumes:
+      - addon_cache:/data
+    depends_on: [prowlarr]
+    restart: unless-stopped
+
+  hybrid-sites:
+    image: hybrid-addons
+    command: ["node", "index-sites.js"]
+    environment:
+      - RESOLVE_BASE_URL=https://s.${DOMINIO}
+      - FLARESOLVERR_URL=http://flaresolverr:8191/v1
+      - SITES_PORT=7003
+      - DB_PATH=/data/cache-sites.db
+    volumes:
+      - addon_cache:/data
+    depends_on: [flaresolverr]
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - prowlarr_config:/config
+    restart: unless-stopped
+
+  flaresolverr:
+    image: flaresolverr/flaresolverr:latest
+    environment:
+      - LOG_LEVEL=info
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  addon_cache:
+  prowlarr_config:

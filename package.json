@@ -1,0 +1,23 @@
+{
+  "name": "stremio-hybrid-ultimate",
+  "version": "1.1.0",
+  "description": "Addon Híbrido Definitivo para Stremio (Prowlarr + Balandro + Alfa)",
+  "main": "index.js",
+  "scripts": {
+    "start:prowlarr": "node index-prowlarr.js",
+    "start:sites": "node index-sites.js",
+    "start:híbrido": "node index.js",
+    "start": "lsof -ti :7001 :7003 | xargs kill 2>/dev/null; sleep 1; node index-prowlarr.js & node index-sites.js & wait"
+  },
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.0",
+    "axios": "^1.6.0",
+    "cloudscraper": "^4.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "sqlite3": "^5.1.7",
+    "dotenv": "^16.4.0"
+  },
+  "allowScripts": {
+    "sqlite3@5.1.7": true
+  }
+}
