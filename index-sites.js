@@ -218,6 +218,16 @@ function proxify(line, baseUrl, referer) {
   return `/proxy?url=${encodeURIComponent(abs)}&ref=${encodeURIComponent(referer)}`;
 }
 
+app.get('/debug/tpb', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const q = req.query.q || 'dune';
+    const r = await axios.get('https://apibay.org/q.php?q=' + encodeURIComponent(q), { timeout: 10000, validateStatus: null, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' } });
+    const d = r.data;
+    res.json({ status: r.status, isArray: Array.isArray(d), len: Array.isArray(d) ? d.length : String(d).slice(0, 80) });
+  } catch (e) { res.json({ error: e.message }); }
+});
+
 app.get('/proxy', async (req, res) => {
   const url = String(req.query.url || '');
   const ref = String(req.query.ref || '');
