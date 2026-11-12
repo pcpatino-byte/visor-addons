@@ -5,6 +5,7 @@
 // Formato de salida idéntico al motor Prowlarr para reutilizar el pipeline.
 
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 const PUBLIC_TRACKERS = [
   'udp://tracker.opentrackr.org:1337/announce',
@@ -16,6 +17,58 @@ const PUBLIC_TRACKERS = [
 ].map(tr => `&tr=${encodeURIComponent(tr)}`).join('');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// --- Knaben (agregador SIN Cloudflare: funciona desde IPs de datacenter) ---
+// Búsqueda: GET https://knaben.org/search?q=X
+// Filas <tr> con <a title="Título" href="magnet:?xt=urn:btih:HASH...">
+async function fetchKnaben(query) {
+  try {
+    const response = await axios.get(`https://knaben.org/search?q=${encodeURIComponent(query)}`, {
+      timeout: 12000,
+      headers: { 'User-Agent': UA }
+    });
+    const html = String(response.data || '');
+    if (!html.includes('magnet:?xt=urn:btih:')) return [];
+
+    const $ = cheerio.load(html);
+    const out = [];
+    $('tr').each((_, row) => {
+      const $row = $(row);
+      const anchor = $row.find('a[href^="magnet:?xt=urn:btih:"]').first();
+      if (!anchor.length) return;
+      const title = (anchor.attr('title') || anchor.text() || '').trim();
+      let url = anchor.attr('href') || '';
+      const hashMatch = url.match(/urn:btih:([a-zA-Z0-9]{40})/);
+      if (!title || !hashMatch) return;
+      // trackers si el magnet no los trae
+      if (!url.includes('&tr=')) url += PUBLIC_TRACKERS;
+      // seeds: celda numérica de la fila (la mayor suele ser seeds)
+      let seeds = 0;
+      $row.find('td').each((__, td) => {
+        const n = parseInt($(td).text().replace(/[^\d]/g, ''), 10);
+        if (!isNaN(n) && n > seeds && n < 1000000) seeds = n;
+      });
+      const lower = title.toLowerCase();
+      const isLatinoOrDual = lower.includes('latino') || lower.includes('spanish') ||
+        lower.includes('dual') || lower.includes('multi') || lower.includes('español') ||
+        lower.includes('espanol') || lower.includes('latam');
+      out.push({
+        rawTitle: title,
+        url,
+        infoHash: hashMatch[1] || null,
+        source: isLatinoOrDual ? 'Knaben 🇲🇽 [Latino]' : 'Knaben 🌐 [Torrent]',
+        seeders: seeds,
+        size: 0,
+        isLatinoOrDual
+      });
+    });
+    return out
+      .filter(it => it.seeders >= 1)
+      .sort((a, b) => (b.isLatinoOrDual ? 1 : -1) - (a.isLatinoOrDual ? 1 : -1) || b.seeders - a.seeders);
+  } catch (e) {
+    return [];
+  }
+}
 
 // --- TPB apibay ---
 async function fetchTPB(query) {
@@ -114,12 +167,22 @@ async function fetchTorrentsApi(imdbId, extra = null) {
   ].filter(v => v && v.length >= 3))];
 
   let results = [];
-  for (const q of variants) {
-    console.log(`🌐 TorrentsAPI: TPB "${q}"...`);
-    results = await fetchTPB(q);
+  // Knaben primero (sin Cloudflare: sirve desde datacenter), variantes incluidas
+  for (const q of variants.slice(0, 3)) {
+    console.log('🌐 TorrentsAPI: Knaben "' + q + '"...');
+    results = await fetchKnaben(q);
     if (results.length >= 3) break;
-    // apibay rate-limita llamadas rápidas: pausa entre variantes
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 600));
+  }
+
+  // apibay de respaldo (funciona desde IPs residenciales; CF bloquea datacenter)
+  if (results.length < 3) {
+    for (const q of variants.slice(0, 2)) {
+      const tpb = await fetchTPB(q);
+      results = [...results, ...tpb];
+      if (results.length >= 3) break;
+      await new Promise(r => setTimeout(r, 800));
+    }
   }
 
   // series: si solo hay resultados generales, reintenta por temporada
